@@ -1,0 +1,86 @@
+project: my-ai-app
+
+enterprise:
+  organization: streamkernel-demo
+  team: platform
+  audit_log_enabled: true
+  prompt_logging_allowed: false
+  team_daily_limit_usd: 25.00
+  organization_daily_limit_usd: 100.00
+
+proxy:
+  dry_run: true
+  default_output_tokens: 512
+
+budget:
+  daily_limit_usd: 10.00
+  monthly_limit_usd: 200.00
+  warning_threshold: 0.80
+  circuit_breaker_rate_usd_per_hour: 5.00
+
+routing:
+  fallback: downroute
+  tiers:
+    - name: simple
+      complexity_max: 0.30
+      models:
+        - provider: openai
+          model: gpt-4o-mini
+        - provider: anthropic
+          model: claude-haiku-4-5
+      cost_cap_per_request_usd: 0.005
+
+    - name: moderate
+      complexity_max: 0.65
+      models:
+        - provider: anthropic
+          model: claude-sonnet-4-6
+        - provider: openai
+          model: gpt-4o
+      cost_cap_per_request_usd: 0.05
+
+    - name: complex
+      complexity_max: 1.00
+      models:
+        - provider: openai
+          model: gpt-4o
+        - provider: anthropic
+          model: claude-opus-4-6
+      cost_cap_per_request_usd: 0.20
+
+endpoints:
+  /api/classify:
+    force_tier: simple
+  /api/analyze:
+    force_tier: complex
+
+providers:
+  openai:
+    type: openai_compatible
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+  anthropic:
+    type: anthropic
+    api_key_env: ANTHROPIC_API_KEY
+  ollama:
+    type: openai_compatible
+    base_url: http://localhost:11434/v1
+
+# Sample rates for local estimates. Production deployments should replace
+# these with approved vendor pricing and keep them under change control.
+pricing:
+  openai/gpt-4o-mini:
+    input_per_1m_usd: 0.15
+    output_per_1m_usd: 0.60
+  openai/gpt-4o:
+    input_per_1m_usd: 5.00
+    output_per_1m_usd: 15.00
+  anthropic/claude-haiku-4-5:
+    input_per_1m_usd: 0.80
+    output_per_1m_usd: 4.00
+  anthropic/claude-sonnet-4-6:
+    input_per_1m_usd: 3.00
+    output_per_1m_usd: 15.00
+  anthropic/claude-opus-4-6:
+    input_per_1m_usd: 15.00
+    output_per_1m_usd: 75.00

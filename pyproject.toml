@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "costproof"
+version = "0.1.0"
+description = "Local-first LLM cost governor and model arbitrage proxy."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [
+  { name = "Steven Lopez", email = "steven.lopez@streamkernel.io" }
+]
+keywords = [
+  "llm",
+  "cost-governance",
+  "model-routing",
+  "openai-proxy",
+  "finops",
+  "ollama",
+  "anthropic",
+  "fastapi"
+]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "License :: OSI Approved :: Apache Software License",
+  "Topic :: Software Development :: Libraries :: Application Frameworks"
+]
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.30.0",
+  "pydantic>=2.8.0",
+  "pydantic-settings>=2.4.0",
+  "httpx>=0.27.0",
+  "typer>=0.12.0",
+  "rich>=13.7.0",
+  "PyYAML>=6.0.0",
+  "cryptography>=43.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "pytest-asyncio>=0.23.0",
+  "ruff>=0.6.0",
+  "mypy>=1.11.0",
+  "types-PyYAML>=6.0.12"
+]
+tokens = [
+  "tiktoken>=0.7.0"
+]
+
+[project.scripts]
+costproof = "costproof.cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["typer", "yaml"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["costproof.cli.main"]
+disallow_untyped_decorators = false
