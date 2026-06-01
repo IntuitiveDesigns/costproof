@@ -13,6 +13,7 @@ from rich.table import Table
 
 from costproof.config import CostProofSettings, load_config
 from costproof.config.settings import CostProofConfig, CostProofConfigError
+from costproof.router.estimator import InvalidTokenBudgetError, UnknownPricingError
 from costproof.router.engine import RoutingEngine
 from costproof.router.models import BudgetEvaluation, RequestContext, RoutingDecision
 from costproof.storage import SQLiteAuditStore
@@ -104,7 +105,11 @@ def simulate_route(
         project=loaded.project,
         endpoint=endpoint,
     )
-    decision, policy = RoutingEngine(loaded, store).route(payload, context)
+    try:
+        decision, policy = RoutingEngine(loaded, store).route(payload, context)
+    except (InvalidTokenBudgetError, UnknownPricingError) as exc:
+        console.print(f"[red]simulation failed:[/] {exc}")
+        raise typer.Exit(1) from exc
     if record and store is not None:
         store.record_decision(decision, policy, "accepted" if policy.allowed else "blocked")
 

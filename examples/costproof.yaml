@@ -11,6 +11,8 @@ enterprise:
 proxy:
   dry_run: true
   default_output_tokens: 512
+  # Estimate actual completion usage as a fraction of max_tokens/max_completion_tokens.
+  output_token_utilization_factor: 0.50
 
 budget:
   daily_limit_usd: 10.00

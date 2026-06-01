@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from costproof.adapters import OpenAICompatibleAdapter, ProviderAdapterError
 from costproof.config import CostProofConfig, CostProofSettings, load_config
+from costproof.router.estimator import InvalidTokenBudgetError, UnknownPricingError
 from costproof.router.engine import RoutingEngine
 from costproof.router.models import BudgetEvaluation, RequestContext, RoutingDecision
 from costproof.storage import SQLiteAuditStore
@@ -159,7 +160,25 @@ async def chat_completions(
         organization=x_costproof_org,
         endpoint=x_costproof_endpoint,
     )
-    decision, policy = get_engine().route(payload, context)
+    try:
+        decision, policy = get_engine().route(payload, context)
+    except InvalidTokenBudgetError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": {"type": "costproof_invalid_token_budget", "message": str(exc)}},
+        ) from exc
+    except UnknownPricingError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "type": "costproof_missing_pricing",
+                    "message": str(exc),
+                    "provider": exc.provider,
+                    "model": exc.model,
+                }
+            },
+        ) from exc
 
     if not policy.allowed:
         get_store().record_decision(decision, policy, "blocked")

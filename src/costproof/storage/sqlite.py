@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -25,50 +27,41 @@ class SQLiteAuditStore:
         status: DecisionStatus,
         *,
         actual_cost_usd: float | None = None,
+        connection: sqlite3.Connection | None = None,
     ) -> None:
         """Persist one routing decision and its policy outcome."""
 
+        params = (
+            decision.request_id,
+            decision.timestamp.isoformat(),
+            decision.organization,
+            decision.team,
+            decision.project,
+            decision.endpoint,
+            decision.selected_tier,
+            decision.selected_provider,
+            decision.selected_model,
+            decision.requested_model,
+            decision.complexity_score,
+            json.dumps(list(decision.complexity_signals)),
+            decision.estimated_input_tokens,
+            decision.estimated_output_tokens,
+            decision.estimated_cost_usd,
+            actual_cost_usd,
+            decision.cost_cap_usd,
+            int(decision.fallback_applied),
+            decision.reason,
+            json.dumps(list(decision.warnings) + list(policy.warnings)),
+            policy.action,
+            json.dumps(list(policy.reasons)),
+            status,
+        )
+        if connection is not None:
+            self._record_decision(connection, params)
+            return
+
         with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO request_audit (
-                    request_id, timestamp, organization, team, project, endpoint,
-                    selected_tier, selected_provider, selected_model, requested_model,
-                    complexity_score, complexity_signals, estimated_input_tokens,
-                    estimated_output_tokens, estimated_cost_usd, actual_cost_usd,
-                    cost_cap_usd, fallback_applied, reason, warnings,
-                    policy_action, policy_reasons, status
-                )
-                VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-                )
-                """,
-                (
-                    decision.request_id,
-                    decision.timestamp.isoformat(),
-                    decision.organization,
-                    decision.team,
-                    decision.project,
-                    decision.endpoint,
-                    decision.selected_tier,
-                    decision.selected_provider,
-                    decision.selected_model,
-                    decision.requested_model,
-                    decision.complexity_score,
-                    json.dumps(list(decision.complexity_signals)),
-                    decision.estimated_input_tokens,
-                    decision.estimated_output_tokens,
-                    decision.estimated_cost_usd,
-                    actual_cost_usd,
-                    decision.cost_cap_usd,
-                    int(decision.fallback_applied),
-                    decision.reason,
-                    json.dumps(list(decision.warnings) + list(policy.warnings)),
-                    policy.action,
-                    json.dumps(list(policy.reasons)),
-                    status,
-                ),
-            )
+            self._record_decision(conn, params)
 
     def spend_since(
         self,
@@ -76,6 +69,7 @@ class SQLiteAuditStore:
         context: RequestContext,
         scope: str,
         since: datetime,
+        connection: sqlite3.Connection | None = None,
     ) -> float:
         """Return accepted/completed estimated spend since a point in time."""
 
@@ -93,16 +87,85 @@ class SQLiteAuditStore:
         else:
             raise ValueError(f"unknown budget scope: {scope}")
 
-        with self._connect() as conn:
-            row = conn.execute(
-                f"""
-                SELECT COALESCE(SUM(estimated_cost_usd), 0)
-                FROM request_audit
-                WHERE {" AND ".join(where)}
-                """,
-                params,
-            ).fetchone()
+        if connection is not None:
+            return self._spend_since(connection, where, params)
 
+        with self._connect() as conn:
+            return self._spend_since(conn, where, params)
+
+    @contextmanager
+    def transaction(self) -> Iterator[sqlite3.Connection]:
+        """Open a write transaction for atomic budget check-and-record operations."""
+
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield conn
+            except Exception:
+                conn.rollback()
+                raise
+            else:
+                conn.commit()
+
+    def _record_decision(
+        self,
+        conn: sqlite3.Connection,
+        params: tuple[object, ...],
+    ) -> None:
+        conn.execute(
+            """
+            INSERT INTO request_audit (
+                request_id, timestamp, organization, team, project, endpoint,
+                selected_tier, selected_provider, selected_model, requested_model,
+                complexity_score, complexity_signals, estimated_input_tokens,
+                estimated_output_tokens, estimated_cost_usd, actual_cost_usd,
+                cost_cap_usd, fallback_applied, reason, warnings,
+                policy_action, policy_reasons, status
+            )
+            VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            ON CONFLICT(request_id) DO UPDATE SET
+                timestamp = excluded.timestamp,
+                organization = excluded.organization,
+                team = excluded.team,
+                project = excluded.project,
+                endpoint = excluded.endpoint,
+                selected_tier = excluded.selected_tier,
+                selected_provider = excluded.selected_provider,
+                selected_model = excluded.selected_model,
+                requested_model = excluded.requested_model,
+                complexity_score = excluded.complexity_score,
+                complexity_signals = excluded.complexity_signals,
+                estimated_input_tokens = excluded.estimated_input_tokens,
+                estimated_output_tokens = excluded.estimated_output_tokens,
+                estimated_cost_usd = excluded.estimated_cost_usd,
+                actual_cost_usd = excluded.actual_cost_usd,
+                cost_cap_usd = excluded.cost_cap_usd,
+                fallback_applied = excluded.fallback_applied,
+                reason = excluded.reason,
+                warnings = excluded.warnings,
+                policy_action = excluded.policy_action,
+                policy_reasons = excluded.policy_reasons,
+                status = excluded.status
+            """,
+            params,
+        )
+
+    def _spend_since(
+        self,
+        conn: sqlite3.Connection,
+        where: list[str],
+        params: list[object],
+    ) -> float:
+        row = conn.execute(
+            f"""
+            SELECT COALESCE(SUM(estimated_cost_usd), 0)
+            FROM request_audit
+            WHERE {" AND ".join(where)}
+            """,
+            params,
+        ).fetchone()
         value = row[0] if row is not None else 0
         return float(value)
 

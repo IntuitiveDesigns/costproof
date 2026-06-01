@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import sqlite3
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
@@ -18,9 +20,20 @@ from costproof.router.models import (
 from costproof.router.scoring import ComplexityScorer, extract_prompt_text
 from costproof.storage.sqlite import SQLiteAuditStore
 
+_log = logging.getLogger(__name__)
+
+
+class RoutingConfigurationError(ValueError):
+    """Raised when a validated config has been mutated into an unusable state."""
+
 
 class RoutingEngine:
-    """Enterprise-aware model router."""
+    """Enterprise-aware model router.
+
+    When an audit store is supplied, allowed decisions are recorded as accepted inside
+    the same SQLite write transaction used for budget evaluation. Without a store,
+    cumulative budget enforcement is best-effort and limited to a single request.
+    """
 
     def __init__(
         self,
@@ -31,9 +44,15 @@ class RoutingEngine:
         self.config = config
         self.store = store
         self.scorer = scorer or ComplexityScorer()
+        if self.store is None:
+            _log.warning(
+                "RoutingEngine initialized without an audit store; cumulative budget "
+                "enforcement is best-effort"
+            )
         self.estimator = CostEstimator(
             config.pricing,
             default_output_tokens=config.proxy.default_output_tokens,
+            output_token_utilization_factor=config.proxy.output_token_utilization_factor,
         )
 
     def route(
@@ -49,12 +68,13 @@ class RoutingEngine:
         requested_model = model_value if isinstance(model_value, str) else None
         tier, reason = self._select_tier(complexity.score, context.endpoint)
         tier_index = self.config.routing.tiers.index(tier)
-        route = tier.models[0]
+        route = self._first_model(tier)
         estimate = self.estimator.estimate(
             provider=route.provider,
             model=route.model,
             prompt_text=prompt_text,
             payload=payload,
+            input_tokens=complexity.prompt_tokens,
         )
 
         fallback_applied = False
@@ -63,18 +83,29 @@ class RoutingEngine:
 
         if estimate.total_cost_usd > tier.cost_cap_per_request_usd:
             fallback = self.config.routing.fallback
-            if fallback == "downroute" and tier_index > 0:
-                lower = self._find_downroute(tier_index, prompt_text, payload)
-                if lower is not None:
-                    tier, route, estimate = lower
-                    fallback_applied = True
-                    reason = (
-                        "downrouted because estimated cost exceeded the selected tier "
-                        "per-request cap"
+            if fallback == "downroute":
+                if tier_index > 0:
+                    lower = self._find_downroute(
+                        tier_index,
+                        prompt_text,
+                        payload,
+                        input_tokens=complexity.prompt_tokens,
                     )
+                    if lower is not None:
+                        tier, route, estimate = lower
+                        fallback_applied = True
+                        reason = (
+                            "downrouted because estimated cost exceeded the selected tier "
+                            "per-request cap"
+                        )
+                    else:
+                        cap_block_reasons.append(
+                            "estimated request cost exceeds every lower tier per-request cap"
+                        )
                 else:
                     cap_block_reasons.append(
-                        "estimated request cost exceeds every lower tier per-request cap"
+                        "downroute requested but request is already at the lowest tier "
+                        "and exceeds the per-request cap"
                     )
             elif fallback == "warn":
                 warnings.append(
@@ -83,6 +114,7 @@ class RoutingEngine:
             else:
                 cap_block_reasons.append("estimated request cost exceeds selected tier cap")
 
+        estimated_cost_usd = estimate.total_cost_usd
         decision = RoutingDecision(
             request_id=f"cp_{uuid4().hex}",
             timestamp=datetime.now(UTC),
@@ -98,13 +130,18 @@ class RoutingEngine:
             complexity_signals=complexity.signals,
             estimated_input_tokens=estimate.input_tokens,
             estimated_output_tokens=estimate.output_tokens,
-            estimated_cost_usd=round(estimate.total_cost_usd, 8),
+            estimated_cost_usd=round(estimated_cost_usd, 8),
             cost_cap_usd=tier.cost_cap_per_request_usd,
             fallback_applied=fallback_applied,
             reason=reason,
             warnings=tuple(warnings),
         )
-        policy = self._evaluate_budget(context, decision, tuple(cap_block_reasons))
+        policy = self._evaluate_and_reserve(
+            context,
+            decision,
+            estimated_cost_usd,
+            tuple(cap_block_reasons),
+        )
         return decision, policy
 
     def _select_tier(self, complexity_score: float, endpoint: str) -> tuple[RoutingTier, str]:
@@ -118,31 +155,77 @@ class RoutingEngine:
                 return tier, f"complexity score {complexity_score:.4f} matched tier {tier.name}"
 
         tier = self.config.routing.tiers[-1]
-        return tier, f"complexity score {complexity_score:.4f} matched final tier {tier.name}"
+        return (
+            tier,
+            f"complexity score {complexity_score:.4f} exceeded configured thresholds; "
+            f"using highest tier {tier.name}",
+        )
 
     def _find_downroute(
         self,
         selected_tier_index: int,
         prompt_text: str,
         payload: Mapping[str, object],
+        *,
+        input_tokens: int,
     ) -> tuple[RoutingTier, ModelRoute, CostEstimate] | None:
         for tier in reversed(self.config.routing.tiers[:selected_tier_index]):
-            route = tier.models[0]
+            route = self._first_model(tier)
             estimate = self.estimator.estimate(
                 provider=route.provider,
                 model=route.model,
                 prompt_text=prompt_text,
                 payload=payload,
+                input_tokens=input_tokens,
             )
             if estimate.total_cost_usd <= tier.cost_cap_per_request_usd:
                 return tier, route, estimate
         return None
 
+    def _first_model(self, tier: RoutingTier) -> ModelRoute:
+        if not tier.models:
+            raise RoutingConfigurationError(f"routing tier {tier.name!r} has no models configured")
+        return tier.models[0]
+
+    def _evaluate_and_reserve(
+        self,
+        context: RequestContext,
+        decision: RoutingDecision,
+        estimated_cost_usd: float,
+        cap_block_reasons: tuple[str, ...],
+    ) -> BudgetEvaluation:
+        if self.store is None:
+            return self._evaluate_budget(
+                context,
+                decision,
+                estimated_cost_usd,
+                cap_block_reasons,
+            )
+
+        with self.store.transaction() as connection:
+            policy = self._evaluate_budget(
+                context,
+                decision,
+                estimated_cost_usd,
+                cap_block_reasons,
+                storage_connection=connection,
+            )
+            self.store.record_decision(
+                decision,
+                policy,
+                "accepted" if policy.allowed else "blocked",
+                connection=connection,
+            )
+            return policy
+
     def _evaluate_budget(
         self,
         context: RequestContext,
         decision: RoutingDecision,
+        estimated_cost_usd: float,
         cap_block_reasons: tuple[str, ...],
+        *,
+        storage_connection: sqlite3.Connection | None = None,
     ) -> BudgetEvaluation:
         now = decision.timestamp
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -157,7 +240,8 @@ class RoutingEngine:
                 period="day",
                 limit=self.config.budget.daily_limit_usd,
                 since=day_start,
-                estimate=decision.estimated_cost_usd,
+                estimate=estimated_cost_usd,
+                storage_connection=storage_connection,
             ),
             self._scope_status(
                 context=context,
@@ -166,7 +250,8 @@ class RoutingEngine:
                 period="month",
                 limit=self.config.budget.monthly_limit_usd,
                 since=month_start,
-                estimate=decision.estimated_cost_usd,
+                estimate=estimated_cost_usd,
+                storage_connection=storage_connection,
             ),
         ]
 
@@ -179,7 +264,8 @@ class RoutingEngine:
                     period="hour",
                     limit=self.config.budget.circuit_breaker_rate_usd_per_hour,
                     since=hour_start,
-                    estimate=decision.estimated_cost_usd,
+                    estimate=estimated_cost_usd,
+                    storage_connection=storage_connection,
                 )
             )
 
@@ -193,7 +279,8 @@ class RoutingEngine:
                     period="day",
                     limit=enterprise.team_daily_limit_usd,
                     since=day_start,
-                    estimate=decision.estimated_cost_usd,
+                    estimate=estimated_cost_usd,
+                    storage_connection=storage_connection,
                 )
             )
         if enterprise.organization_daily_limit_usd is not None:
@@ -205,7 +292,8 @@ class RoutingEngine:
                     period="day",
                     limit=enterprise.organization_daily_limit_usd,
                     since=day_start,
-                    estimate=decision.estimated_cost_usd,
+                    estimate=estimated_cost_usd,
+                    storage_connection=storage_connection,
                 )
             )
 
@@ -251,10 +339,16 @@ class RoutingEngine:
         limit: float,
         since: datetime,
         estimate: float,
+        storage_connection: sqlite3.Connection | None = None,
     ) -> BudgetScopeStatus:
         current_spend = 0.0
         if self.store is not None:
-            current_spend = self.store.spend_since(context=context, scope=scope, since=since)
+            current_spend = self.store.spend_since(
+                context=context,
+                scope=scope,
+                since=since,
+                connection=storage_connection,
+            )
         projected = round(current_spend + estimate, 8)
         return BudgetScopeStatus(
             scope=scope,

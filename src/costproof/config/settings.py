@@ -151,6 +151,7 @@ class ProxyConfig(BaseModel):
 
     dry_run: bool | None = None
     default_output_tokens: int = Field(default=512, ge=1)
+    output_token_utilization_factor: float = Field(default=0.5, gt=0, le=1)
     reject_streaming_when_forwarding: bool = True
 
 
