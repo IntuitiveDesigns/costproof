@@ -13,7 +13,7 @@ from costproof.config import load_config
 from costproof.config.settings import CostProofConfig
 from costproof.router.engine import RoutingEngine
 from costproof.router.models import RequestContext
-from costproof.router.scoring import ComplexityScorer
+from costproof.router.scoring import ComplexityScorer, approximate_token_count, extract_prompt_text
 from costproof.storage import SQLiteAuditStore
 
 
@@ -50,6 +50,61 @@ def test_complexity_scorer_is_explainable_and_ordered() -> None:
     assert complex_result.score > simple.score
     assert "code_detected" in complex_result.signals
     assert "structured_output" in complex_result.signals
+
+
+def test_code_token_estimate_accounts_for_punctuation() -> None:
+    prose = "Please check this value before returning the answer."
+    code = "if x != None and y >= 0:\n    return foo_bar(x) + 1\n"
+
+    assert approximate_token_count(code) > approximate_token_count(prose)
+    assert approximate_token_count(code) >= 18
+
+
+def test_keyword_matching_uses_boundaries_and_negation() -> None:
+    scorer = ComplexityScorer()
+
+    false_positive_text = "This is a reasonable and notable vegetable example."
+    negated_structured_text = "Do not return JSON, just plain text."
+
+    assert scorer.score_text(false_positive_text).signals == ("simple_prompt",)
+    assert "structured_output" not in scorer.score_text(negated_structured_text).signals
+
+
+def test_instruction_markers_ignore_fenced_code_blocks() -> None:
+    result = ComplexityScorer().score_text(
+        """
+        Inspect this snippet:
+        ```python
+        # - first internal note
+        # - second internal note
+        # - third internal note
+        def ok():
+            return True
+        ```
+        """
+    )
+
+    assert "code_detected" in result.signals
+    assert "multi_step_instructions" not in result.signals
+
+
+def test_system_message_scoring_is_explicitly_configurable() -> None:
+    payload = {
+        "messages": [
+            {"role": "system", "content": "You must respond in JSON."},
+            {"role": "user", "content": "Say hello."},
+        ]
+    }
+
+    assert "You must respond in JSON" in extract_prompt_text(payload)
+    assert "You must respond in JSON" not in extract_prompt_text(
+        payload,
+        include_system_messages=False,
+    )
+    assert "structured_output" in ComplexityScorer().score_payload(payload).signals
+    assert "structured_output" not in ComplexityScorer(
+        include_system_messages=False,
+    ).score_payload(payload).signals
 
 
 def test_router_selects_endpoint_override() -> None:

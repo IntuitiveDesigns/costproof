@@ -1,9 +1,22 @@
 # CostProof
 
+[![Stars](https://img.shields.io/github/stars/IntuitiveDesigns/costproof?style=social)](https://github.com/IntuitiveDesigns/costproof/stargazers)
+[![Watchers](https://img.shields.io/github/watchers/IntuitiveDesigns/costproof?style=social)](https://github.com/IntuitiveDesigns/costproof/watchers)
+[![PyPI downloads](https://img.shields.io/pypi/dm/costproof?label=PyPI%20downloads)](https://pypi.org/project/costproof/)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![SQLite](https://img.shields.io/badge/SQLite-local%20audit-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-SDK-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![StreamKernel](https://img.shields.io/badge/StreamKernel-Proof%20Suite-1f6feb)](https://streamkernel.io/)
+
 CostProof is a local-first LLM cost governor and model arbitrage proxy. It sits between
 applications and LLM providers, exposes an OpenAI-compatible interface, routes requests to
 the cheapest capable configured model, enforces spend limits, and records audit-safe cost
 attribution.
+
+CostProof is part of the Proof Suite by StreamKernel LLC, built for teams that want local
+control over production AI infrastructure without turning cost governance into another
+cloud dependency.
 
 ## Current Implementation
 
