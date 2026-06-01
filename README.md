@@ -61,50 +61,68 @@ costproof/
 
 Requires Python 3.11+.
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-```
-
-On Windows PowerShell:
+Windows PowerShell:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+python -m costproof.cli routes validate --config examples/costproof.yaml
 ```
+
+Linux/macOS:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+python -m costproof.cli routes validate --config examples/costproof.yaml
+```
+
+After installation, the shorter `costproof ...` command should also work. If your shell
+cannot find `costproof`, keep using `python -m costproof.cli ...`; it runs through the
+active interpreter and works on Windows and Linux.
 
 ## Run Locally
 
 Validate the example config:
 
 ```bash
-costproof routes validate --config examples/costproof.yaml
+python -m costproof.cli routes validate --config examples/costproof.yaml
 ```
 
 Simulate a route without calling a provider:
 
 ```bash
-costproof routes simulate "Classify this support ticket" --endpoint /api/classify
+python -m costproof.cli routes simulate "Classify this support ticket" --endpoint /api/classify
+```
+
+Record a simulated decision so the dashboard has demo data:
+
+```bash
+python -m costproof.cli routes simulate "Classify this support ticket" --endpoint /api/classify --record
 ```
 
 Run the proxy:
 
 ```bash
-uvicorn costproof.proxy.app:app --reload --port 4000
+python -m uvicorn costproof.proxy.app:app --reload --port 4000
 ```
 
 Run the management API:
 
 ```bash
-uvicorn costproof.server.app:app --reload --port 4001
+python -m uvicorn costproof.server.app:app --reload --port 4001
 ```
+
+Then open <http://127.0.0.1:4001/> for the local dashboard.
 
 Query budget status:
 
 ```bash
-costproof budget status --config examples/costproof.yaml
+python -m costproof.cli budget status --config examples/costproof.yaml
 ```
 
 ## Design Principles
@@ -126,7 +144,7 @@ python -m mypy src
 
 ## License
 
-CostProof uses the same component-level licensing model as CostProof across the
+CostProof uses the same component-level licensing model as OutputProof across the
 StreamKernel Proof Suite.
 
 - `costproof-proxy` (Python): [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)

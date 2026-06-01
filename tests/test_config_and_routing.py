@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
 
 import costproof.proxy.app as proxy_app
+import costproof.server.app as server_app
 from costproof import __version__
 from costproof.config import load_config
 from costproof.config.settings import CostProofConfig
@@ -203,3 +204,42 @@ def test_proxy_dry_run_records_audit_safe_decision(
     decisions = SQLiteAuditStore(tmp_path / "audit.db").recent_decisions()
     assert len(decisions) == 1
     assert decisions[0]["selected_model"] == "gpt-4o-mini"
+
+
+def test_server_dashboard_renders_root(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("COSTPROOF_CONFIG_PATH", str(Path("examples/costproof.yaml").resolve()))
+    monkeypatch.setenv("COSTPROOF_SQLITE_PATH", str(tmp_path / "dashboard.db"))
+    server_app.get_settings.cache_clear()
+    server_app.get_config.cache_clear()
+    server_app.get_store.cache_clear()
+
+    client = TestClient(server_app.app)
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "CostProof" in response.text
+    assert "LLM Spend Control" in response.text
+    assert "Recent Routing Decisions" in response.text
+
+
+def test_proxy_root_guides_browser_users(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("COSTPROOF_CONFIG_PATH", str(Path("examples/costproof.yaml").resolve()))
+    monkeypatch.setenv("COSTPROOF_SQLITE_PATH", str(tmp_path / "proxy.db"))
+    monkeypatch.setenv("COSTPROOF_DRY_RUN", "true")
+    proxy_app.get_settings.cache_clear()
+    proxy_app.get_config.cache_clear()
+    proxy_app.get_store.cache_clear()
+    proxy_app.get_engine.cache_clear()
+
+    client = TestClient(proxy_app.app)
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "CostProof Proxy" in response.text
+    assert "/v1/chat/completions" in response.text

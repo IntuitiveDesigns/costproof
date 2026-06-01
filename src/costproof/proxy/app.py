@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import time
 from functools import lru_cache
+from html import escape
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.responses import HTMLResponse, Response
 
 from costproof.adapters import OpenAICompatibleAdapter, ProviderAdapterError
 from costproof.config import CostProofConfig, CostProofSettings, load_config
@@ -48,6 +50,79 @@ def get_engine() -> RoutingEngine:
     """Return cached routing engine."""
 
     return RoutingEngine(get_config(), get_store())
+
+
+@app.get("/", response_class=HTMLResponse)
+async def root() -> str:
+    """Render a small proxy status page for browser visits."""
+
+    config = get_config()
+    dry_run = "on" if _effective_dry_run(None) else "off"
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CostProof Proxy</title>
+  <style>
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #f6f8fb;
+      color: #152033;
+      font: 14px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }}
+    main {{
+      width: min(720px, calc(100vw - 32px));
+      background: white;
+      border: 1px solid #d7dee8;
+      border-radius: 8px;
+      box-shadow: 0 10px 28px rgba(21, 32, 51, 0.08);
+      padding: 28px;
+    }}
+    h1 {{ margin: 0 0 8px; font-size: 24px; letter-spacing: 0; }}
+    p {{ color: #667085; margin: 0 0 18px; }}
+    code {{
+      display: block;
+      background: #111827;
+      color: #e5e7eb;
+      border-radius: 6px;
+      padding: 10px 12px;
+      overflow-x: auto;
+    }}
+    .meta {{ display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }}
+    .badge {{
+      border: 1px solid #d7dee8;
+      border-radius: 999px;
+      padding: 6px 10px;
+      color: #667085;
+    }}
+    a {{ color: #275fbc; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>CostProof Proxy</h1>
+    <p>This service accepts OpenAI-compatible chat-completions requests.</p>
+    <div class="meta">
+      <span class="badge">Project: {escape(config.project)}</span>
+      <span class="badge">Organization: {escape(config.enterprise.organization)}</span>
+      <span class="badge">Dry run: {dry_run}</span>
+    </div>
+    <code>POST http://127.0.0.1:4000/v1/chat/completions</code>
+    <p style="margin-top:18px;">Open the dashboard at <a href="http://127.0.0.1:4001/">http://127.0.0.1:4001/</a>.</p>
+  </main>
+</body>
+</html>"""
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> Response:
+    """Return an empty favicon response to avoid noisy browser 404s."""
+
+    return Response(status_code=204)
 
 
 @app.get("/health")

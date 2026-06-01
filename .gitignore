@@ -16,6 +16,9 @@ build/
 *.key
 *.pem
 costproof.local.yaml
+costproof.db
+*.sqlite
+*.sqlite3
 
 # Node
 node_modules/

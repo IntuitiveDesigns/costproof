@@ -11,7 +11,7 @@ python -m mypy src
 ## Proxy Server
 
 ```bash
-uvicorn costproof.proxy.app:app --reload --port 4000
+python -m uvicorn costproof.proxy.app:app --reload --port 4000
 ```
 
 Useful headers:
@@ -25,7 +25,7 @@ Useful headers:
 ## Management API
 
 ```bash
-uvicorn costproof.server.app:app --reload --port 4001
+python -m uvicorn costproof.server.app:app --reload --port 4001
 ```
 
 Implemented endpoints:
@@ -39,9 +39,10 @@ Implemented endpoints:
 ## CLI
 
 ```bash
-costproof routes validate --config examples/costproof.yaml
-costproof routes simulate "Classify this ticket" --endpoint /api/classify
-costproof budget status --config examples/costproof.yaml
+python -m costproof.cli routes validate --config examples/costproof.yaml
+python -m costproof.cli routes simulate "Classify this ticket" --endpoint /api/classify
+python -m costproof.cli routes simulate "Classify this ticket" --endpoint /api/classify --record
+python -m costproof.cli budget status --config examples/costproof.yaml
 ```
 
 ## Live Forwarding
