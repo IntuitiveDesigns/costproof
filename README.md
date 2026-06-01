@@ -8,6 +8,7 @@
 [![SQLite](https://img.shields.io/badge/SQLite-local%20audit-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-SDK-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![StreamKernel](https://img.shields.io/badge/StreamKernel-Proof%20Suite-1f6feb)](https://streamkernel.io/)
+[![License](https://img.shields.io/badge/license-Apache--2.0%20%2F%20BSL--1.1-blue)](LICENSE)
 
 CostProof is a local-first LLM cost governor and model arbitrage proxy. It sits between
 applications and LLM providers, exposes an OpenAI-compatible interface, routes requests to
@@ -122,3 +123,33 @@ python -m pytest
 python -m ruff check .
 python -m mypy src
 ```
+
+## License
+
+CostProof uses the same component-level licensing model as CostProof across the
+StreamKernel Proof Suite.
+
+- `costproof-proxy` (Python): [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
+  for the core proxy, routing engine, OpenAI/Anthropic/Ollama adapters, and CLI.
+- `costproof-server`: [Business Source License 1.1](https://mariadb.com/bsl11/) for
+  the dashboard, team API, per-project attribution, alerting, and policy engine.
+- `costproof-sdk` (Python/TypeScript): [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
+  for programmatic spend querying.
+
+See [LICENSE](LICENSE) for component paths, BSL parameters, and allowed free local
+dashboard use.
+
+## Pricing Tiers
+
+- Free (Open Source Core): Proxy, routing engine, OpenAI/Anthropic/Ollama adapters, CLI,
+  local dashboard, unlimited requests. No credit card required.
+- Individual: $19/month. Adds cloud dashboard sync, 90-day history, email alerts,
+  circuit breaker notifications, and priority support.
+- Team: $179/month, up to 10 seats. Adds per-project attribution, team spend policies,
+  Slack alerts, GitHub Actions cost gate, and SSO.
+- Enterprise: Custom. Adds BYO key management, air-gapped deployment, SLA,
+  Datadog/Prometheus export, and dedicated onboarding.
+
+---
+
+*A product of [StreamKernel LLC](https://streamkernel.io/) · [costproof.io](https://costproof.io/) · [steven.lopez@streamkernel.io](mailto:steven.lopez@streamkernel.io)*

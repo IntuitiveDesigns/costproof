@@ -1,4 +1,100 @@
-Apache License
-Version 2.0, January 2004
+CostProof Licensing
 
-Placeholder: replace this file with the full Apache-2.0 license text before public release.
+Copyright (c) 2026 StreamKernel LLC.
+
+CostProof uses the same component-level licensing model as CostProof across the
+StreamKernel Proof Suite. The intent is simple: the developer-facing proxy and SDKs are
+Apache-licensed, while the dashboard/server product layer is source-available under the
+Business Source License 1.1.
+
+1. Licensing Structure
+
+----------------------
+
+costproof-proxy (Python) - Apache License 2.0
+
+Includes the core proxy, routing engine, OpenAI/Anthropic/Ollama adapters, local
+configuration, cost estimation, budget enforcement, SQLite audit storage, and CLI.
+
+Covered paths include:
+
+- src/costproof/__init__.py
+- src/costproof/adapters/
+- src/costproof/cli/
+- src/costproof/config/
+- src/costproof/proxy/
+- src/costproof/router/
+- src/costproof/security/
+- src/costproof/storage/
+- examples/
+- docs/
+- tests/
+
+costproof-server - Business Source License 1.1
+
+Includes the dashboard server, team API, per-project attribution, alerting, policy engine,
+management API, and metrics/export surfaces.
+
+Covered paths include:
+
+- src/costproof/server/
+
+costproof-sdk (Python/TypeScript) - Apache License 2.0
+
+Includes programmatic spend querying and management API clients.
+
+Covered paths include:
+
+- src/costproof/sdk/
+- packages/typescript-sdk/
+
+1. Business Source License Parameters
+
+-------------------------------------
+
+Licensor: StreamKernel LLC
+Licensed Work: costproof-server
+License: Business Source License 1.1
+Change Date: 2030-06-01
+Change License: Apache License, Version 2.0
+
+Additional Use Grant:
+
+You may use costproof-server for local self-hosted dashboard use, development, testing,
+evaluation, and unlimited local requests with costproof-proxy. This Additional Use Grant
+does not include offering costproof-server as a hosted or managed service, cloud dashboard
+sync service, team policy service, alerting service, SSO-enabled service, or other
+commercial service to third parties without a commercial license from StreamKernel LLC.
+
+1. Pricing Tiers
+
+----------------
+
+Free (Open Source Core) - Proxy, routing engine, OpenAI/Anthropic/Ollama adapters, CLI,
+local dashboard, unlimited requests. No credit card required. The proxy and SDK components
+are Apache 2.0; the local dashboard is included under the BSL 1.1 Additional Use Grant
+above.
+
+Individual - $19/month - Adds cloud dashboard sync, 90-day history, email alerts, circuit
+breaker notifications, and priority support.
+
+Team - $179/month, up to 10 seats - Adds per-project attribution, team spend policies,
+Slack alerts, GitHub Actions cost gate, and SSO.
+
+Enterprise - Custom - Adds BYO key management, air-gapped deployment, SLA,
+Datadog/Prometheus export, and dedicated onboarding.
+
+1. License Texts
+
+----------------
+
+Apache License 2.0: <https://www.apache.org/licenses/LICENSE-2.0>
+Business Source License 1.1: <https://mariadb.com/bsl11/>
+
+1. Contact
+
+----------
+
+StreamKernel LLC: <https://streamkernel.io/>
+CostProof: <https://costproof.io/>
+Email: <steven.lopez@streamkernel.io>

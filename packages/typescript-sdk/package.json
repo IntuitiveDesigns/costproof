@@ -1,7 +1,7 @@
 {
   "name": "@costproof/sdk",
   "version": "0.1.0",
-  "description": "TypeScript SDK scaffold for CostProof.",
+  "description": "Apache-licensed TypeScript SDK for CostProof spend querying.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
